@@ -1,73 +1,96 @@
-<!-- Archivo: src/routes/+page.svelte -->
 
 <script lang="ts">
-  // Importamos la función 'invoke' desde la API de Tauri.
-  // Este es nuestro puente para hablar con el backend de Rust.
+  
   import { invoke } from '@tauri-apps/api/core';
 
-  // Creamos variables para guardar el estado de nuestra página.
-  // 'selectedFolderPath' guardará la ruta que nos devuelva Rust.
+  type Track = {
+    path: string;
+    title: string | null;
+    artist: string | null;
+    album: string | null;
+    duration_secs: number | null;
+  };
+
   let selectedFolderPath: string | null = null;
-  // 'isLoading' nos ayudará a deshabilitar el botón mientras esperamos una respuesta.
   let isLoading = false;
 
-  /**
-   * Esta función asíncrona se ejecuta cuando el usuario hace clic en el botón.
-   */
+  let tracks: Track[] = [];
+
+  let errorMessage: string | null = null;
+
+  
   async function openFolderDialog() {
-    // 1. Ponemos la UI en estado de "cargando".
+  
     isLoading = true;
-    selectedFolderPath = null; // Limpiamos el resultado anterior.
+    selectedFolderPath = null; 
+    tracks = [];
+
+    errorMessage = null;
 
     try {
-      // 2. Usamos 'invoke' para llamar al comando 'select_folder' que definimos en Rust.
-      //    El nombre debe coincidir exactamente.
-      //    Especificamos que esperamos recibir un string o null.
       const result = await invoke<string | null>('select_folder');
 
-      // 3. Procesamos la respuesta de Rust.
       if (result) {
-        // Si 'result' tiene un valor (no es null), el usuario seleccionó una carpeta.
+
         console.log('Carpeta seleccionada:', result);
         selectedFolderPath = result;
+
+        console.log('Solicitando lista de canciones a Rust...');
+        isLoading = true;
+
+        const trackList = await invoke<Track[]>('get_tracks', { folderPath: result });
+
+        console.log('Respuesta de Rust:', trackList);
+        tracks = trackList;
+
       } else {
-        // Si 'result' es null, el usuario cerró el diálogo sin seleccionar nada.
+        
         console.log('El usuario canceló la selección.');
       }
     } catch (e) {
-      // Si ocurre un error durante la llamada (ej. el comando no existe), lo capturamos.
-      console.error('Error al llamar al comando select_folder:', e);
-      alert('Ocurrió un error al abrir el diálogo.');
+
+      console.error('Error al invocar el comando de Rust:', e);
+      errorMessage = `Error en el backend: ${e}`;
+
     } finally {
-      // 4. Sea cual sea el resultado, quitamos el estado de "cargando".
       isLoading = false;
     }
   }
 </script>
 
-<!-- Esta es la parte visual (HTML) de nuestra página -->
+
+
 <main>
-  <h1>Reproductor de Música</h1>
+  <h1>Sound-P</h1>
   <p>Selecciona una carpeta para empezar a escuchar tu música.</p>
 
-  <!-- El evento 'on:click' llama a nuestra función 'openFolderDialog'.
-       La propiedad 'disabled' usa nuestra variable 'isLoading' para
-       evitar que el usuario haga clic múltiples veces. -->
   <button on:click={openFolderDialog} disabled={isLoading}>
     {isLoading ? 'Abriendo...' : 'Seleccionar Carpeta de Música'}
   </button>
 
-  <!-- Este bloque solo se mostrará si 'selectedFolderPath' tiene un valor.
-       Es una forma de dar feedback visual al usuario. -->
+  {#if errorMessage}
+    <div class="error-box">
+      <p>{errorMessage}</p>
+    </div>
+  {/if}
+
   {#if selectedFolderPath}
     <div class="result-box">
       <p><strong>Ruta de la carpeta de música:</strong></p>
       <code>{selectedFolderPath}</code>
     </div>
   {/if}
+
+  {#if tracks.length > 0}
+    <div class="result-box">
+      <p><strong>Se encontraron {tracks.length} canciones.</strong></p>
+      <p>(Revisa la consola de Rust para ver la lista de archivos escaneados)</p>
+    </div>
+  {/if}
+
 </main>
 
-<!-- Estilos CSS para que la página no se vea tan vacía -->
+
 <style>
   main {
     display: flex;
