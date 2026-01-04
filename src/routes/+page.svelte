@@ -1,58 +1,37 @@
 
 <script lang="ts">
-  
   import { invoke } from '@tauri-apps/api/core';
+  import { goto } from '$app/navigation';
+  import { trackList as trackListStore } from '$lib/stores/playerStore';
+  import type { Track } from '$lib/types';
+ 
 
-  type Track = {
-    path: string;
-    title: string | null;
-    artist: string | null;
-    album: string | null;
-    duration_secs: number | null;
-  };
-
-  let selectedFolderPath: string | null = null;
   let isLoading = false;
-
-  let tracks: Track[] = [];
-
   let errorMessage: string | null = null;
-
   
   async function openFolderDialog() {
-  
     isLoading = true;
-    selectedFolderPath = null; 
-    tracks = [];
-
     errorMessage = null;
 
     try {
-      const result = await invoke<string | null>('select_folder');
+      const folderPath = await invoke<string | null>('select_folder');
 
-      if (result) {
-
-        console.log('Carpeta seleccionada:', result);
-        selectedFolderPath = result;
-
+      if (folderPath) {
         console.log('Solicitando lista de canciones a Rust...');
-        isLoading = true;
-
-        const trackList = await invoke<Track[]>('get_tracks', { folderPath: result });
-
-        console.log('Respuesta de Rust:', trackList);
-        tracks = trackList;
+        const newTracks = await invoke<Track[]>('get_tracks', { folderPath });
+        console.log(`Respuesta de Rust: ${newTracks.length} canciones encontradas.`);
+        
+        trackListStore.set(newTracks);
+        
+        await goto('/library');
 
       } else {
-        
         console.log('El usuario canceló la selección.');
+        isLoading = false;
       }
     } catch (e) {
-
-      console.error('Error al invocar el comando de Rust:', e);
+      console.error('Error:', e);
       errorMessage = `Error en el backend: ${e}`;
-
-    } finally {
       isLoading = false;
     }
   }
@@ -61,33 +40,14 @@
 
 
 <main>
-  <h1>Sound-P</h1>
-  <p>Selecciona una carpeta para empezar a escuchar tu música.</p>
-
-  <button on:click={openFolderDialog} disabled={isLoading}>
-    {isLoading ? 'Abriendo...' : 'Seleccionar Carpeta de Música'}
-  </button>
-
-  {#if errorMessage}
-    <div class="error-box">
-      <p>{errorMessage}</p>
-    </div>
-  {/if}
-
-  {#if selectedFolderPath}
-    <div class="result-box">
-      <p><strong>Ruta de la carpeta de música:</strong></p>
-      <code>{selectedFolderPath}</code>
-    </div>
-  {/if}
-
-  {#if tracks.length > 0}
-    <div class="result-box">
-      <p><strong>Se encontraron {tracks.length} canciones.</strong></p>
-      <p>(Revisa la consola de Rust para ver la lista de archivos escaneados)</p>
-    </div>
-  {/if}
-
+    <h1>Reproductor de Música</h1>
+    <p>Selecciona una carpeta para empezar a escuchar tu música.</p>
+    <button on:click={openFolderDialog} disabled={isLoading}>
+        {isLoading ? 'Escaneando...' : 'Seleccionar Carpeta de Música'}
+    </button>
+    {#if errorMessage}
+    <div class="error-box"><p>{errorMessage}</p></div>
+    {/if}
 </main>
 
 
@@ -99,7 +59,7 @@
     justify-content: center;
     text-align: center;
     padding-top: 5rem;
-    gap: 1.5rem; /* Espacio entre los elementos */
+    gap: 1.5rem; 
     font-family: sans-serif;
   }
   
@@ -134,11 +94,11 @@
   }
 
   code {
-    display: block; /* Para que ocupe su propia línea */
+    display: block; 
     padding: 0.5rem;
     background-color: #ffffff;
     border-radius: 4px;
-    word-break: break-all; /* Evita que rutas largas desborden la caja */
+    word-break: break-all; 
     margin-top: 0.5rem;
   }
 </style>

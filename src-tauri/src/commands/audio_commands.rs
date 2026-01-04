@@ -1,4 +1,5 @@
-// Archivo: src-tauri/src/commands/audio_commands.rs
+use lofty::file::{AudioFile, TaggedFileExt};
+use lofty::tag::Accessor;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::oneshot;
@@ -8,26 +9,65 @@ use crate::models::track::Track;
 
 #[tauri::command]
 pub async fn select_folder<R: Runtime>(app: AppHandle<R>) -> Option<String> {
-    // ... (código existente)
     let (tx, rx) = oneshot::channel::<Option<String>>();
+
     app.dialog().file().pick_folder(move |folder_path| {
-        let result = if let Some(path) = folder_path {
-            Some(path.to_string())
-        } else {
-            None
-        };
+        let result = folder_path.map(|path| path.to_string());
         tx.send(result).ok();
     });
+
     rx.await.unwrap_or(None)
 }
 
 #[tauri::command]
 pub async fn get_tracks(folder_path: String) -> Vec<Track> {
-    println!("Iniciando escaneo de la carpeta: {}", folder_path);
     let mut tracks = Vec::new();
-    for entry in WalkDir::new(folder_path).into_iter().filter_map(|e| e.ok()) {
-        println!("Encontrado: {:?}", entry.path());
+    let supported_extensions = ["mp3", "flac", "wav", "m4a", "ogg"];
+
+    for entry in WalkDir::new(folder_path).into_iter().filter_map(Result::ok) {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let extension = match path.extension().and_then(|s| s.to_str()) {
+            Some(ext) => ext.to_lowercase(),
+            None => continue,
+        };
+
+        if supported_extensions.contains(&extension.as_str()) {
+            if let Ok(tagged_file) = lofty::read_from_path(path) {
+                let properties = tagged_file.properties();
+                
+                let mut title = None;
+                let mut artist = None;
+                let mut album = None;
+
+                if let Some(tag) = tagged_file.primary_tag() {
+                    title = tag.title().map(|s| s.to_string());
+                    artist = tag.artist().map(|s| s.to_string());
+                    album = tag.album().map(|s| s.to_string());
+                }
+
+                if title.is_none() {
+                    title = path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .map(str::to_string);
+                }
+
+                tracks.push(Track {
+                    path: path.to_string_lossy().to_string(),
+                    title,
+                    artist,
+                    album,
+                    duration_secs: Some(properties.duration().as_secs()),
+                });
+            } else {
+                println!("Error al leer metadatos de: {:?}", path);
+            }
+        }
     }
-    println!("Escaneo completado.");
+
+    println!("Escaneo completado. Se encontraron {} canciones.", tracks.len());
     tracks
 }
