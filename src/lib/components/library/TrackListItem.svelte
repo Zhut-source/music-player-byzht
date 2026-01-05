@@ -3,7 +3,9 @@
   import type { Track } from '$lib/types';
   import { goto } from '$app/navigation';
   // 1. IMPORTAMOS el store de la canción activa.
-  import { activeTrack } from '$lib/stores/playerStore';
+   import { activeTrack, isPlaying } from '$lib/stores/playerStore';
+   import { invoke } from '@tauri-apps/api/core';
+  
 
   export let track: Track;
 
@@ -16,21 +18,19 @@
     return `${min}:${sec}`;
   }
 
-  function handlePlayClick(event: MouseEvent) {
+  async function handlePlayClick(event: MouseEvent) {
     event.stopPropagation();
-    console.log(`Reproduciendo ahora: ${track.title ?? 'Desconocido'}`);
     
-    // 2. CAMBIO CLAVE: Al hacer clic en Play, también actualizamos la canción activa.
+    console.log(`Llamando a play_track con la ruta: ${track.path}`);
+    
+    await invoke('play_track', { path: track.path });
+
     activeTrack.set(track);
-    
-    // MÁS ADELANTE: Aquí llamaremos a la función para reproducir.
+    isPlaying.set(true);
   }
 
   function handleItemClick() {
-    // 3. CAMBIO CLAVE: Primero, actualizamos el store con la canción seleccionada.
     activeTrack.set(track);
-    
-    // Luego, navegamos a la página SIN pasar ningún estado.
     goto('/now-playing');
   }
 </script>

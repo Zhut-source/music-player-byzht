@@ -1,28 +1,43 @@
 <script lang="ts">
-  // Por ahora, no hay lógica. Solo definimos el esqueleto.
-  // Más adelante, aquí tendremos variables para saber si está en play o pause.
-  let isPlaying = false; 
+  import { invoke } from '@tauri-apps/api/core';
+  // 1. IMPORTAMOS los stores que necesitamos.
+  import { isPlaying, activeTrack } from '$lib/stores/playerStore';
+
+  async function togglePlayPause() {
+    if ($activeTrack) {
+      if ($isPlaying) {
+        await invoke('pause_track');
+        isPlaying.set(false);
+      } else {
+        await invoke('resume_track');
+        isPlaying.set(true);
+      }
+    }
+  }
 </script>
 
 <div class="player-controls">
-  <button class="control-button">
-    <!-- Icono de "Anterior" (usaremos texto por ahora) -->
+  <button class="control-button" title="Anterior">
     ⏮
   </button>
 
-  <button class="control-button play-button">
-    <!-- Cambiaremos el icono dependiendo del estado 'isPlaying' -->
-    {#if isPlaying}
-      <!-- Icono de "Pausa" -->
+  <!-- 3. Conectamos el botón al estado y a la función. -->
+  <!-- El `title` cambia dinámicamente. -->
+  <!-- El botón está deshabilitado si no hay ninguna canción activa. -->
+  <button 
+    class="control-button play-button" 
+    on:click={togglePlayPause}
+    disabled={!$activeTrack}
+    title={$isPlaying ? 'Pausar' : 'Reproducir'}
+  >
+    {#if $isPlaying}
       ⏸
     {:else}
-      <!-- Icono de "Play" -->
       ▶️
     {/if}
   </button>
 
-  <button class="control-button">
-    <!-- Icono de "Siguiente" -->
+  <button class="control-button" title="Siguiente">
     ⏭
   </button>
 </div>

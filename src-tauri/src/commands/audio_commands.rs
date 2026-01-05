@@ -1,11 +1,13 @@
+use crate::audio::player::AudioPlayerState;
+use crate::models::track::Track;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::tag::Accessor;
-use tauri::{AppHandle, Runtime};
+use std::fs::File;
+use std::io::BufReader;
+use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::oneshot;
 use walkdir::WalkDir;
-
-use crate::models::track::Track;
 
 #[tauri::command]
 pub async fn select_folder<R: Runtime>(app: AppHandle<R>) -> Option<String> {
@@ -21,6 +23,7 @@ pub async fn select_folder<R: Runtime>(app: AppHandle<R>) -> Option<String> {
 
 #[tauri::command]
 pub async fn get_tracks(folder_path: String) -> Vec<Track> {
+    
     let mut tracks = Vec::new();
     let supported_extensions = ["mp3", "flac", "wav", "m4a", "ogg"];
 
@@ -70,4 +73,36 @@ pub async fn get_tracks(folder_path: String) -> Vec<Track> {
 
     println!("Escaneo completado. Se encontraron {} canciones.", tracks.len());
     tracks
+}
+
+#[tauri::command]
+pub fn play_track(path: String, audio_state: State<AudioPlayerState>) {
+    
+    let sink = audio_state.inner().sink.lock().unwrap();
+    
+    sink.stop();
+    
+    if sink.empty() {
+        if let Ok(file) = File::open(path) {
+            let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
+            sink.append(source);
+            sink.play();
+        }
+    }
+}
+
+#[tauri::command]
+pub fn pause_track(audio_state: State<AudioPlayerState>) {
+    let sink = audio_state.inner().sink.lock().unwrap();
+    if !sink.is_paused() {
+        sink.pause();
+    }
+}
+
+#[tauri::command]
+pub fn resume_track(audio_state: State<AudioPlayerState>) {
+    let sink = audio_state.inner().sink.lock().unwrap();
+    if sink.is_paused() {
+        sink.play();
+    }
 }

@@ -1,15 +1,31 @@
+// Archivo: src/lib.rs
 
 mod commands;
 mod models;
-
+mod audio;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+   
+    let (_stream, stream_handle) = rodio::OutputStream::try_default().unwrap();
+    
+    let sink = rodio::Sink::try_new(&stream_handle).unwrap();
+    
+    std::mem::forget(_stream);
+
+
     tauri::Builder::default()
+        // Ahora, gestionamos un estado que SÓLO contiene el Sink.
+        .manage(audio::player::AudioPlayerState {
+            sink: std::sync::Mutex::new(sink),
+        })
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::audio_commands::select_folder, 
-            commands::audio_commands::get_tracks
+            commands::audio_commands::get_tracks,
+            commands::audio_commands::play_track,
+            commands::audio_commands::pause_track,
+            commands::audio_commands::resume_track
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
