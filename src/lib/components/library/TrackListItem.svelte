@@ -1,0 +1,131 @@
+<!-- Archivo: src/lib/components/library/TrackListItem.svelte -->
+<script lang="ts">
+  import type { Track } from '$lib/types';
+  import { goto } from '$app/navigation';
+  // 1. IMPORTAMOS el store de la canción activa.
+  import { activeTrack } from '$lib/stores/playerStore';
+
+  export let track: Track;
+
+  // La función de formato de duración se queda igual.
+  function formatDuration(seconds: number | null): string {
+    // ... (código sin cambios)
+    if (seconds === null || isNaN(seconds)) return '--:--';
+    const min = Math.floor(seconds / 60);
+    const sec = Math.floor(seconds % 60).toString().padStart(2, '0');
+    return `${min}:${sec}`;
+  }
+
+  function handlePlayClick(event: MouseEvent) {
+    event.stopPropagation();
+    console.log(`Reproduciendo ahora: ${track.title ?? 'Desconocido'}`);
+    
+    // 2. CAMBIO CLAVE: Al hacer clic en Play, también actualizamos la canción activa.
+    activeTrack.set(track);
+    
+    // MÁS ADELANTE: Aquí llamaremos a la función para reproducir.
+  }
+
+  function handleItemClick() {
+    // 3. CAMBIO CLAVE: Primero, actualizamos el store con la canción seleccionada.
+    activeTrack.set(track);
+    
+    // Luego, navegamos a la página SIN pasar ningún estado.
+    goto('/now-playing');
+  }
+</script>
+
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+<li class="track-item" on:click={handleItemClick}>
+  <div class="play-button-container">
+    <!-- 1. Botón de Play para reproducción inmediata -->
+    <button class="play-button" on:click={handlePlayClick}>
+      ▶️
+    </button>
+  </div>
+  <div class="track-info">
+    <div class="main-info">
+      <span class="track-title">{track.title ?? 'Título Desconocido'}</span>
+      <span class="track-artist">{track.artist ?? 'Artista Desconocido'}</span>
+      <span class="track-duration">{formatDuration(track.duration_secs)}</span>
+    </div>
+    <!-- 2. Ruta del archivo debajo de la información principal -->
+    <div class="path-info">
+      <span class="track-path">{track.path}</span>
+    </div>
+  </div>
+</li>
+
+<style>
+  .track-item {
+    display: flex; /* Cambiamos a flexbox para alinear el botón y la info */
+    align-items: center;
+    gap: 1rem;
+    padding: 0.8rem 1rem;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+  .track-item:hover {
+    background-color: #f0f0f0;
+  }
+  
+  .play-button-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .play-button {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #555;
+  }
+  .play-button:hover {
+    background-color: #e0e0e0;
+    border-color: #aaa;
+  }
+  
+  .track-info {
+    flex-grow: 1; /* Ocupa el resto del espacio */
+    display: flex;
+    flex-direction: column; /* Apila la info principal y la ruta */
+    overflow: hidden; /* Evita que el texto largo se desborde */
+  }
+
+  .main-info {
+    display: grid;
+    /* Reutilizamos el grid para alinear Título, Artista y Duración */
+    grid-template-columns: 2fr 1fr auto;
+    gap: 1rem;
+    align-items: center;
+    width: 100%;
+  }
+
+  .track-title { font-weight: 500; }
+  .track-artist { color: #555; }
+  .track-duration { color: #666; font-family: monospace; }
+  
+  .path-info {
+    margin-top: 0.25rem;
+  }
+
+  .track-path {
+    font-size: 0.75rem;
+    color: #888;
+  }
+
+  /* Estilos comunes para evitar desbordamiento de texto */
+  .track-title, .track-artist, .track-path {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+</style>

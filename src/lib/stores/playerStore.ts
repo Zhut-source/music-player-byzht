@@ -4,3 +4,5 @@ import type { Track } from '$lib/types';
 
 
 export const trackList = writable<Track[]>([]);
+
+export const activeTrack = writable<Track | null>(null);
