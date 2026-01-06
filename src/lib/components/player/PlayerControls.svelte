@@ -1,6 +1,5 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  // 1. IMPORTAMOS los stores que necesitamos.
   import { isPlaying, activeTrack } from '$lib/stores/playerStore';
 
   async function togglePlayPause() {
@@ -21,9 +20,6 @@
     ⏮
   </button>
 
-  <!-- 3. Conectamos el botón al estado y a la función. -->
-  <!-- El `title` cambia dinámicamente. -->
-  <!-- El botón está deshabilitado si no hay ninguna canción activa. -->
   <button 
     class="control-button play-button" 
     on:click={togglePlayPause}
@@ -47,14 +43,14 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 1.5rem; /* Espacio entre los botones */
+    gap: 1.5rem; 
   }
 
   .control-button {
     background: none;
     border: none;
     cursor: pointer;
-    font-size: 1.5rem; /* Tamaño de los iconos */
+    font-size: 1.5rem; 
     color: #333;
     transition: transform 0.1s ease-in-out;
   }
@@ -68,6 +64,6 @@
   }
 
   .play-button {
-    font-size: 2.5rem; /* El botón de play es más grande */
+    font-size: 2.5rem; 
   }
 </style>

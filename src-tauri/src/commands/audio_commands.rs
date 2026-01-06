@@ -77,17 +77,27 @@ pub async fn get_tracks(folder_path: String) -> Vec<Track> {
 
 #[tauri::command]
 pub fn play_track(path: String, audio_state: State<AudioPlayerState>) {
-    
     let sink = audio_state.inner().sink.lock().unwrap();
     
-    sink.stop();
+    // --- LÓGICA CORREGIDA ---
     
-    if sink.empty() {
-        if let Ok(file) = File::open(path) {
-            let source = rodio::Decoder::new(BufReader::new(file)).unwrap();
+    // 1. Si el Sink no está vacío, lo detenemos y lo limpiamos.
+    if !sink.empty() {
+        sink.stop();
+        // `clear()` elimina todas las canciones en cola, asegurando que esté vacío.
+        sink.clear(); 
+    }
+    
+    // 2. Ahora que estamos seguros de que el Sink está limpio, añadimos la nueva canción.
+    if let Ok(file) = File::open(path) {
+        if let Ok(source) = rodio::Decoder::new(BufReader::new(file)) {
             sink.append(source);
             sink.play();
+        } else {
+            println!("Error al decodificar el archivo de audio.");
         }
+    } else {
+        println!("Error al abrir el archivo de audio.");
     }
 }
 

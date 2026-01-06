@@ -1,16 +1,13 @@
-<!-- Archivo: src/routes/now-playing/+page.svelte -->
+
 
 <script lang="ts">
   import { activeTrack } from '$lib/stores/playerStore';
-  // 1. CAMBIO: Importamos `goto` en lugar de `back`.
   import { goto } from '$app/navigation';
   import { fly } from 'svelte/transition';
 
 </script>
 
-<!-- 2. ENVOLVEMOS nuestro contenido en un `div` con la directiva `transition:slide` -->
 <div class="now-playing-container" transition:fly={{ duration: 300, y: 20 }}>
-  <!-- 3. AÑADIMOS el botón de retorno -->
   <button class="back-button" on:click={() => goto('/library')}>
     &larr; Volver a la Biblioteca
   </button>
@@ -32,20 +29,18 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start; /* Alineamos arriba para ver el botón */
+    justify-content: flex-start; 
     padding: 2rem;
     text-align: center;
-    position: relative; /* Necesario para posicionar el botón */
+    position: relative; 
     min-height: 100%;
   }
 
   .back-button {
-    /* Posicionamos el botón en la esquina superior izquierda */
     position: absolute;
     top: 1rem;
     left: 1rem;
     
-    /* Estilos del botón */
     background: #f0f0f0;
     border: 1px solid #ddd;
     border-radius: 20px;
@@ -59,7 +54,6 @@
     border-color: #ccc;
   }
 
-  /* El resto de los estilos se quedan igual */
   .cover-art-placeholder {
     width: 300px;
     height: 300px;
@@ -68,7 +62,7 @@
     align-items: center;
     justify-content: center;
     font-size: 5rem;
-    margin-top: 3rem; /* Espacio para que no choque con el botón */
+    margin-top: 3rem; 
     margin-bottom: 2rem;
     border-radius: 8px;
   }
