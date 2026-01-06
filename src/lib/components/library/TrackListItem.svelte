@@ -4,16 +4,13 @@
   import { goto } from '$app/navigation';
   import { activeTrack, isPlaying } from '$lib/stores/playerStore';
   import { invoke } from '@tauri-apps/api/core';
-  import { get } from 'svelte/store'; // <-- Importamos `get` para leer stores sin suscripción
+  import { get } from 'svelte/store'; 
 
   export let track: Track;
 
-  // --- LÓGICA DE ESTADO PARA EL BOTÓN ---
-  // `isThisTrackActive` será `true` si la canción de este item es la que está
-  // cargada en el reproductor a nivel global.
+ 
   $: isThisTrackActive = $activeTrack?.path === track.path;
   
-  // `isThisTrackPlaying` será `true` solo si esta es la canción activa Y está sonando.
   $: isThisTrackPlaying = isThisTrackActive && $isPlaying;
 
   function formatDuration(seconds: number | null): string {
@@ -23,28 +20,20 @@
     return `${min}:${sec}`;
   }
 
-  // --- LÓGICA DE `handlePlayClick` COMPLETAMENTE REESCRITA ---
   async function handlePlayClick(event: MouseEvent) {
     event.stopPropagation();
     
-    // Usamos `get` para leer el valor actual, ya que `$isPlaying` podría no estar actualizado
-    // en el instante exacto del clic dentro de una función async.
     const currentlyPlaying = get(isPlaying);
 
     if (isThisTrackActive) {
-      // Caso 1: Se hizo clic en la canción que ya está activa.
       if (currentlyPlaying) {
-        // Si está sonando, la pausamos.
         await invoke('pause_track');
         isPlaying.set(false);
       } else {
-        // Si está pausada, la reanudamos.
         await invoke('resume_track');
         isPlaying.set(true);
       }
     } else {
-      // Caso 2: Se hizo clic en una canción nueva.
-      // La reproducimos desde el principio sin importar el estado anterior.
       await invoke('play_track', { path: track.path });
       activeTrack.set(track);
       isPlaying.set(true);
@@ -52,15 +41,15 @@
   }
 
   function handleItemClick() {
-    // La lógica de navegación se queda igual
-    activeTrack.set(track);
-    goto('/now-playing');
-  }
+  const encodedPath = encodeURIComponent(track.path);
+  
+  goto(`/track/${encodedPath}`);
+}
 </script>
 
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-<li class="track-item" on:click={handleItemClick}>
+<li class="track-item" on:click={handleItemClick} class:playing={isThisTrackActive}>
   <div class="play-button-container">
     <!-- 1. Botón de Play para reproducción inmediata -->
     <button class="play-button" on:click={handlePlayClick}>
@@ -95,6 +84,10 @@
   }
   .track-item:hover {
     background-color: #f0f0f0;
+  }
+  .track-item.playing {
+    background-color: #e0f0ff; /* Un azul claro para destacar */
+    border-left: 3px solid #007bff; /* Un borde a la izquierda */
   }
   
   .play-button-container {

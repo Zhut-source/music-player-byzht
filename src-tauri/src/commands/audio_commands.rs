@@ -5,7 +5,7 @@ use lofty::tag::Accessor;
 use rusqlite::params;
 use std::fs::File;
 use std::io::BufReader;
-use tauri::{AppHandle, Runtime, State}; // <-- CORREGIDO: `State` importado una sola vez
+use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::oneshot;
 use walkdir::WalkDir;
@@ -91,7 +91,6 @@ pub async fn get_tracks(folder_path: String, db_state: State<'_, DbConnection>) 
     println!("{} canciones insertadas en la base de datos.", tracks.len());
     Ok(tracks)
 }
-
 
 #[tauri::command]
 pub fn play_track(path: String, audio_state: State<AudioPlayerState>) {

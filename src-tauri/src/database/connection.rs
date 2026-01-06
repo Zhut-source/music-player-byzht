@@ -4,29 +4,23 @@ use rusqlite::Connection;
 use std::{path::PathBuf, sync::Mutex};
 use tauri::{AppHandle, Manager};
 
+const DEV_DB_PATH: &str = "G:\\doc importantes\\Proyectos ZHUT\\music-player-v1\\music-player\\BD\\library.db";
+
 pub struct DbConnection(pub Mutex<Connection>);
 
 pub fn init_database(app_handle: &AppHandle) -> Connection {
-    let db_path: PathBuf;
-    if cfg!(debug_assertions) {
-        // --- LÓGICA DE RUTA PERSONALIZADA ---
-        
-        // 1. Obtenemos la ruta a la carpeta `src-tauri`.
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        
-        // 2. Navegamos un nivel hacia arriba para llegar a la raíz del proyecto
-        //    (a la carpeta que contiene `src-tauri`).
-        let project_root = manifest_dir.parent().expect("Failed to get project root");
+    let db_path: PathBuf;   
 
-        // 3. Creamos la carpeta `BD` en la raíz del proyecto.
-        let db_folder = project_root.join("BD");
-        std::fs::create_dir_all(&db_folder).expect("Failed to create BD directory");
+   if cfg!(debug_assertions) {
+        // MODO DESARROLLO: Usa la ruta que definiste en la constante.
+        db_path = PathBuf::from(DEV_DB_PATH);
         
-        // 4. La ruta final de nuestro archivo de base de datos.
-        db_path = db_folder.join("library.db");
+        // Nos aseguramos de que la carpeta contenedora exista.
+        if let Some(parent_dir) = db_path.parent() {
+            std::fs::create_dir_all(parent_dir).expect("Failed to create custom DB directory");
+        }
 
     } else {
-        // La lógica de producción se queda igual (usa AppData).
         let app_data_dir = app_handle.path().app_data_dir().expect("Failed to get app data dir");
         std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data dir");
         db_path = app_data_dir.join("library.db");

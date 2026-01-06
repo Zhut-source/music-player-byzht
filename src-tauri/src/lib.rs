@@ -31,6 +31,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::audio_commands::select_folder, 
             commands::audio_commands::get_tracks,
+            commands::audio_commands::fetch_tracks,
             commands::audio_commands::play_track,
             commands::audio_commands::pause_track,
             commands::audio_commands::resume_track

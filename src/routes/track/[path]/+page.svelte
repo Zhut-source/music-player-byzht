@@ -1,22 +1,20 @@
 
 <script lang="ts">
+  import { page } from '$app/stores';
   import { activeTrack, isPlaying } from '$lib/stores/playerStore';
   import { goto } from '$app/navigation';
   import { fly } from 'svelte/transition';
   import { invoke } from '@tauri-apps/api/core';
-  import { page } from '$app/stores';
-  import type { Track } from '$lib/types';
   
+  $: viewedTrack = $page.data.track;
 
-  const viewedTrack: Track | undefined = $page.data.track;
-
+  // La lógica para el estado del botón es la misma y ahora funcionará perfectamente.
   $: isThisTrackActive = $activeTrack?.path === viewedTrack?.path;
-
   $: isThisTrackPlaying = isThisTrackActive && $isPlaying;
 
   async function handlePlayPauseClick() {
     if (!viewedTrack) return;
-
+    // ... (la lógica de play/pause se queda igual que en la versión funcional anterior)
     if (isThisTrackPlaying) {
       await invoke('pause_track');
       isPlaying.set(false);
@@ -24,7 +22,6 @@
       await invoke('resume_track');
       isPlaying.set(true);
     } else {
- 
       await invoke('play_track', { path: viewedTrack.path });
       activeTrack.set(viewedTrack);
       isPlaying.set(true);
@@ -32,25 +29,25 @@
   }
 </script>
 
-<div class="now-playing-container" transition:fly={{ duration: 300, y: 20 }}>
+<div class="track-details-container" transition:fly={{ duration: 250, y: 15 }}>
   <button class="back-button" on:click={() => goto('/library')}>
     &larr; Volver a la Biblioteca
   </button>
 
-  {#if $activeTrack}
+  {#if viewedTrack}
     <div class="cover-art-placeholder">🖼️</div>
-    
-    <h1>{$activeTrack.title ?? 'Título Desconocido'}</h1>
-    <h2>{$activeTrack.artist ?? 'Artista Desconocido'}</h2>
-    <p>Del álbum: {$activeTrack.album ?? 'Álbum Desconocido'}</p>
-    <code>{$activeTrack.path}</code>
+    <h1>{viewedTrack.title ?? 'Título Desconocido'}</h1>
+    <h2>{viewedTrack.artist ?? 'Artista Desconocido'}</h2>
+    <button class="main-play-button" on:click={handlePlayPauseClick}>
+      {isThisTrackPlaying ? 'Pausar' : 'Reproducir'}
+    </button>
   {:else}
-    <h1>No se ha seleccionado ninguna canción.</h1>
+    <h1>Canción no encontrada.</h1>
   {/if}
 </div>
 
 <style>
-  .now-playing-container {
+  .track-details-container {
     display: flex;
     flex-direction: column;
     align-items: center;

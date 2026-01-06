@@ -40,9 +40,11 @@
       <slot />
     </main>
 
+<a href="/now-playing" class="player-bar-link">
     <footer class="player-bar">
       <PlayerControls />
     </footer>
+  </a>
   </div>
 {/if}
 
@@ -64,5 +66,10 @@
     display: flex; /* Centramos el contenido */
     justify-content: center;
     align-items: center;
+  }
+  .player-bar-link {
+    text-decoration: none;
+    color: inherit;
+    display: block; /* Hacemos que ocupe todo el ancho */
   }
 </style>
