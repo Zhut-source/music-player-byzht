@@ -3,6 +3,9 @@
 mod commands;
 mod models;
 mod audio;
+mod database;
+
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -15,7 +18,12 @@ pub fn run() {
 
 
     tauri::Builder::default()
-        // Ahora, gestionamos un estado que SÓLO contiene el Sink.
+
+        .setup(|app| {
+            let conn = database::connection::init_database(&app.handle());
+            app.manage(database::connection::DbConnection(std::sync::Mutex::new(conn)));
+            Ok(())
+        })
         .manage(audio::player::AudioPlayerState {
             sink: std::sync::Mutex::new(sink),
         })

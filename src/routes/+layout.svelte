@@ -1,20 +1,50 @@
-<!-- Archivo: src/routes/+layout.svelte -->
 
 <script lang="ts">
-  // 1. Importamos nuestro nuevo componente.
   import PlayerControls from '$lib/components/player/PlayerControls.svelte';
+  import { onMount } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { trackList } from '$lib/stores/playerStore';
+  import type { Track } from '$lib/types';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
+
+  let hasCheckedDb = false;
+
+  onMount(async () => {
+    console.log("Layout montado. Obteniendo biblioteca desde la base de datos...");
+    try {
+      const savedTracks = await invoke<Track[]>('fetch_tracks');
+      
+      if (savedTracks && savedTracks.length > 0) {
+        console.log(`Biblioteca cargada: ${savedTracks.length} canciones encontradas.`);
+        trackList.set(savedTracks);
+
+        if ($page.route.id === '/') {
+          console.log("Redirigiendo a /library...");
+          await goto('/library');
+        }
+      } else {
+        console.log("No se encontró una biblioteca guardada.");
+      }
+    } catch (e) {
+      console.error("Error al obtener la biblioteca:", e);
+    } finally {
+      hasCheckedDb = true; 
+    }
+  });
 </script>
 
-<div class="app-container">
-  <main class="main-content">
-    <slot />
-  </main>
+{#if hasCheckedDb}
+  <div class="app-container">
+    <main class="main-content">
+      <slot />
+    </main>
 
-  <footer class="player-bar">
-    <!-- 2. Reemplazamos el texto por el componente. -->
-    <PlayerControls />
-  </footer>
-</div>
+    <footer class="player-bar">
+      <PlayerControls />
+    </footer>
+  </div>
+{/if}
 
 <style>
   .app-container {
