@@ -155,3 +155,12 @@ pub fn fetch_tracks(db_state: State<'_, DbConnection>) -> Result<Vec<Track>, Str
     println!("Se encontraron {} canciones en la base de datos.", tracks.len());
     Ok(tracks)
 }
+
+#[tauri::command]
+pub fn set_volume(volume: f32, audio_state: State<AudioPlayerState>) {
+    // Aseguramos que el valor esté en el rango correcto (0.0 a 1.0).
+    let clamped_volume = volume.clamp(0.0, 1.0);
+    
+    let sink = audio_state.inner().sink.lock().unwrap();
+    sink.set_volume(clamped_volume);
+}

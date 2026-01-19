@@ -34,7 +34,8 @@ pub fn run() {
             commands::audio_commands::fetch_tracks,
             commands::audio_commands::play_track,
             commands::audio_commands::pause_track,
-            commands::audio_commands::resume_track
+            commands::audio_commands::resume_track,
+            commands::audio_commands::set_volume
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
