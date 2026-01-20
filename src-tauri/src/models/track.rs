@@ -8,3 +8,10 @@ pub struct Track {
     pub album: Option<String>,
     pub duration_secs: Option<u64>,
 }
+
+#[derive(Clone, serde::Serialize)]
+pub struct PlaybackStatus {
+    pub position_secs: f64,
+    pub duration_secs: f64,
+    pub is_playing: bool,
+}

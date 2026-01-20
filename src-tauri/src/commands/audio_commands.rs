@@ -1,15 +1,19 @@
 use crate::audio::player::AudioPlayerState;
 use crate::database::connection::DbConnection;
+use crate::models::track::PlaybackStatus;
 use crate::models::track::Track;
 use lofty::file::{AudioFile, TaggedFileExt};
 use lofty::tag::Accessor;
+use rodio::Source;
 use rusqlite::params;
 use std::fs::File;
 use std::io::BufReader;
+use tauri::Emitter;
 use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::oneshot;
 use walkdir::WalkDir;
+use std::time::Duration;
 
 #[tauri::command]
 pub async fn select_folder<R: Runtime>(app: AppHandle<R>) -> Option<String> {
@@ -104,78 +108,106 @@ pub async fn get_tracks(
 }
 
 #[tauri::command]
-pub fn play_track(path: String, audio_state: State<AudioPlayerState>) {
-    // 1. Clonamos el `Arc` que contiene nuestro `Mutex<Sink>`.
-    //    Ahora tenemos dos punteros al mismo Sink: `sink_for_main_thread` y `sink_for_new_thread`.
-    let sink_for_main_thread = audio_state.inner().sink.clone();
-    let sink_for_new_thread = audio_state.inner().sink.clone();
+pub fn play_track(path: String, audio_state: State<AudioPlayerState>, app_handle: AppHandle) {
+    let sink_arc = audio_state.inner().sink.clone();
 
-    // Bloqueamos el Mutex para realizar las operaciones de reproducción.
-    // El `let _guard` asegura que el Mutex se desbloquee al final de este bloque.
     {
-        let sink = sink_for_main_thread.lock().unwrap();
+    let sink = sink_arc.lock().unwrap();
 
-        if !sink.empty() {
-            sink.stop();
-            sink.clear();
-        }
-        
-        if let Ok(file) = File::open(&path) {
-            if let Ok(source) = rodio::Decoder::new(BufReader::new(file)) {
-                sink.append(source);
-                sink.play();
-                println!("Reproduciendo: {}", path);
-            } else {
-                println!("Error al decodificar: {}", &path);
-            }
+    if !sink.empty() {
+        sink.stop();
+        sink.clear();
+    }
+
+    if let Ok(file) = File::open(&path) {
+        if let Ok(source) = rodio::Decoder::new(BufReader::new(file)) {
+            let total_duration = source.total_duration().unwrap_or_default();
+
+            sink.append(source);
+            sink.play();
+            println!("Reproduciendo: {}, Duración: {:?}", path, total_duration);
+
+            app_handle
+                .emit(
+                    "playback-status-update",
+                    PlaybackStatus {
+                        position_secs: 0.0,
+                        duration_secs: total_duration.as_secs_f64(),
+                        is_playing: true,
+                    },
+                )
+                .unwrap();
         } else {
-            println!("Error al abrir: {}", &path);
+            println!("Error al decodificar: {}", &path);
         }
-    } // El Mutex se desbloquea aquí automáticamente.
+    } else {
+        println!("Error al abrir: {}", &path);
+    }
+    }
 
-    // 2. Lanzamos el hilo, dándole su propia copia del Arc.
+    let monitor_thread_sink = sink_arc;
+    let monitor_thread_handle = app_handle;
+
     std::thread::spawn(move || {
-        println!("[Hilo secundario] Hilo monitor iniciado.");
+        println!("[Monitor] Hilo de seguimiento iniciado.");
         
-        loop { // Bucle infinito
-            // 3. Dentro del bucle, bloqueamos el Mutex para acceder al Sink.
-            let sink = sink_for_new_thread.lock().unwrap();
+        loop {
+            let sink = monitor_thread_sink.lock().unwrap();
 
-            // 4. Comprobamos si el Sink está vacío.
-            if sink.empty() {
-                println!("[Hilo secundario] La canción ha terminado. Saliendo del bucle.");
-                break; // Rompemos el bucle y el hilo termina.
+            let is_empty = sink.empty();
+            
+            drop(sink);
+
+            if is_empty {
+                println!("[Monitor] La canción ha terminado.");
+                
+                monitor_thread_handle.emit("playback-ended", ()).unwrap();
+                
+                break;
             }
             
-            // Si no está vacío, imprimimos un mensaje (más adelante, emitiremos el tiempo).
-            println!("[Hilo secundario] La canción sigue sonando...");
-            
-            // 5. IMPORTANTE: Liberamos el Mutex explícitamente con `drop(sink)`.
-            //    Si no lo hacemos, el Mutex permanecerá bloqueado durante el `sleep`,
-            //    y el hilo principal no podrá acceder al Sink (ej. para pausar).
-            drop(sink);
-            
-            // Pausamos el hilo por un segundo.
-            std::thread::sleep(std::time::Duration::from_secs(1));
+            std::thread::sleep(std::time::Duration::from_millis(500));
         }
         
-        println!("[Hilo secundario] Hilo monitor terminado.");
+        println!("[Monitor] Hilo de seguimiento terminado.");
     });
+    
 }
 
 #[tauri::command]
-pub fn pause_track(audio_state: State<AudioPlayerState>) {
+pub fn pause_track(audio_state: State<AudioPlayerState>, app_handle: AppHandle) {
     let sink = audio_state.inner().sink.lock().unwrap();
+
     if !sink.is_paused() {
         sink.pause();
+
+        app_handle
+            .emit(
+                "playback-status-update",
+                PlaybackStatus {
+                    position_secs: 0.0, 
+                    duration_secs: 0.0,
+                    is_playing: false,
+                },
+            )
+            .unwrap();
     }
 }
 
 #[tauri::command]
-pub fn resume_track(audio_state: State<AudioPlayerState>) {
+pub fn resume_track(audio_state: State<AudioPlayerState>, app_handle: AppHandle) {
     let sink = audio_state.inner().sink.lock().unwrap();
     if sink.is_paused() {
         sink.play();
+
+        app_handle.emit(
+            "playback-status-update",
+            PlaybackStatus {
+                position_secs: 0.0, 
+                duration_secs: 0.0,
+                is_playing: true,
+            }
+        ).unwrap();
     }
 }
 
@@ -214,4 +246,17 @@ pub fn set_volume(volume: f32, audio_state: State<AudioPlayerState>) {
 
     let sink = audio_state.inner().sink.lock().unwrap();
     sink.set_volume(clamped_volume);
+}
+
+#[tauri::command]
+pub fn seek_track(position_secs: f64, audio_state: State<AudioPlayerState>) {
+    let sink = audio_state.inner().sink.lock().unwrap();
+    
+    let seek_time = Duration::from_secs_f64(position_secs);
+
+    if sink.try_seek(seek_time).is_ok() {
+        println!("Seek exitoso a: {:?}", seek_time);
+    } else {
+        println!("Fallo en el seek a: {:?}", seek_time);
+    }
 }
