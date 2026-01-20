@@ -12,6 +12,27 @@ export const isPlaying = writable<boolean>(false);
 
 export const volume = writable<number>(60);
 
+
+/**
+ * Encuentra y devuelve la siguiente canción en la lista basada en la actual.
+ * @param currentTrack - La canción que está sonando ahora.
+ * @param trackList - La lista completa de canciones.
+ * @returns El objeto de la siguiente canción, o `null` si no se puede encontrar.
+ */
+export function findNextTrack(currentTrack: Track | null, trackList: Track[]): Track | null {
+  if (!currentTrack || trackList.length === 0) {
+    return trackList.length > 0 ? trackList[0] : null;
+  }
+
+  const currentIndex = trackList.findIndex(t => t.path === currentTrack.path);
+  if (currentIndex === -1) {
+    return trackList.length > 0 ? trackList[0] : null;
+  }
+
+  const nextIndex = (currentIndex + 1) % trackList.length;
+  return trackList[nextIndex] ?? null;
+}
+
 /**
  * Función auxiliar interna para centralizar la lógica de reproducción.
  * Llama a Rust y actualiza los stores.

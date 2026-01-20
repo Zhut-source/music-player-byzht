@@ -25,7 +25,7 @@ pub fn run() {
             Ok(())
         })
         .manage(audio::player::AudioPlayerState {
-            sink: std::sync::Mutex::new(sink),
+            sink: std::sync::Arc::new(std::sync::Mutex::new(sink)),
         })
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![

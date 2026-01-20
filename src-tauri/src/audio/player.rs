@@ -1,7 +1,7 @@
 
 use rodio::Sink;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub struct AudioPlayerState {
-    pub sink: Mutex<Sink>,
+    pub sink: Arc<Mutex<Sink>>,
 }

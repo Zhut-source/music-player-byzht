@@ -1,3 +1,4 @@
+use crate::audio::player::AudioPlayerState;
 use crate::database::connection::DbConnection;
 use crate::models::track::Track;
 use lofty::file::{AudioFile, TaggedFileExt};
@@ -9,7 +10,6 @@ use tauri::{AppHandle, Runtime, State};
 use tauri_plugin_dialog::DialogExt;
 use tokio::sync::oneshot;
 use walkdir::WalkDir;
-use crate::audio::player::AudioPlayerState;
 
 #[tauri::command]
 pub async fn select_folder<R: Runtime>(app: AppHandle<R>) -> Option<String> {
@@ -24,7 +24,10 @@ pub async fn select_folder<R: Runtime>(app: AppHandle<R>) -> Option<String> {
 }
 
 #[tauri::command]
-pub async fn get_tracks(folder_path: String, db_state: State<'_, DbConnection>) -> Result<Vec<Track>, String> {
+pub async fn get_tracks(
+    folder_path: String,
+    db_state: State<'_, DbConnection>,
+) -> Result<Vec<Track>, String> {
     let tracks = tokio::task::spawn_blocking(move || {
         // --- Toda la lógica de escaneo se mueve a un hilo bloqueante ---
         // Esto evita que el escaneo de una carpeta grande congele la UI.
@@ -33,7 +36,9 @@ pub async fn get_tracks(folder_path: String, db_state: State<'_, DbConnection>) 
 
         for entry in WalkDir::new(folder_path).into_iter().filter_map(Result::ok) {
             let path = entry.path();
-            if !path.is_file() { continue; }
+            if !path.is_file() {
+                continue;
+            }
 
             if let Some(extension) = path.extension().and_then(|s| s.to_str()) {
                 if supported_extensions.contains(&extension.to_lowercase().as_str()) {
@@ -50,7 +55,10 @@ pub async fn get_tracks(folder_path: String, db_state: State<'_, DbConnection>) 
                         }
 
                         if title.is_none() {
-                            title = path.file_stem().and_then(|s| s.to_str()).map(str::to_string);
+                            title = path
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .map(str::to_string);
                         }
 
                         temp_tracks.push(Track {
@@ -66,13 +74,15 @@ pub async fn get_tracks(folder_path: String, db_state: State<'_, DbConnection>) 
         }
         temp_tracks
         // --- Fin del hilo bloqueante ---
-    }).await.map_err(|e| e.to_string())?;
-
+    })
+    .await
+    .map_err(|e| e.to_string())?;
 
     // La inserción en la BD se hace después de que el escaneo ha terminado.
     let conn = db_state.inner().0.lock().unwrap();
 
-    conn.execute("DELETE FROM tracks", []).map_err(|e| e.to_string())?;
+    conn.execute("DELETE FROM tracks", [])
+        .map_err(|e| e.to_string())?;
 
     let mut stmt = conn.prepare(
         "INSERT OR REPLACE INTO tracks (path, title, artist, album, duration_secs) VALUES (?1, ?2, ?3, ?4, ?5)"
@@ -85,37 +95,72 @@ pub async fn get_tracks(folder_path: String, db_state: State<'_, DbConnection>) 
             &track.artist,
             &track.album,
             &track.duration_secs,
-        ]).map_err(|e| e.to_string())?;
+        ])
+        .map_err(|e| e.to_string())?;
     }
-    
+
     println!("{} canciones insertadas en la base de datos.", tracks.len());
     Ok(tracks)
 }
 
 #[tauri::command]
 pub fn play_track(path: String, audio_state: State<AudioPlayerState>) {
-    let sink = audio_state.inner().sink.lock().unwrap();
-    
-    // --- LÓGICA CORREGIDA ---
-    
-    // 1. Si el Sink no está vacío, lo detenemos y lo limpiamos.
-    if !sink.empty() {
-        sink.stop();
-        // `clear()` elimina todas las canciones en cola, asegurando que esté vacío.
-        sink.clear(); 
-    }
-    
-    // 2. Ahora que estamos seguros de que el Sink está limpio, añadimos la nueva canción.
-    if let Ok(file) = File::open(path) {
-        if let Ok(source) = rodio::Decoder::new(BufReader::new(file)) {
-            sink.append(source);
-            sink.play();
-        } else {
-            println!("Error al decodificar el archivo de audio.");
+    // 1. Clonamos el `Arc` que contiene nuestro `Mutex<Sink>`.
+    //    Ahora tenemos dos punteros al mismo Sink: `sink_for_main_thread` y `sink_for_new_thread`.
+    let sink_for_main_thread = audio_state.inner().sink.clone();
+    let sink_for_new_thread = audio_state.inner().sink.clone();
+
+    // Bloqueamos el Mutex para realizar las operaciones de reproducción.
+    // El `let _guard` asegura que el Mutex se desbloquee al final de este bloque.
+    {
+        let sink = sink_for_main_thread.lock().unwrap();
+
+        if !sink.empty() {
+            sink.stop();
+            sink.clear();
         }
-    } else {
-        println!("Error al abrir el archivo de audio.");
-    }
+        
+        if let Ok(file) = File::open(&path) {
+            if let Ok(source) = rodio::Decoder::new(BufReader::new(file)) {
+                sink.append(source);
+                sink.play();
+                println!("Reproduciendo: {}", path);
+            } else {
+                println!("Error al decodificar: {}", &path);
+            }
+        } else {
+            println!("Error al abrir: {}", &path);
+        }
+    } // El Mutex se desbloquea aquí automáticamente.
+
+    // 2. Lanzamos el hilo, dándole su propia copia del Arc.
+    std::thread::spawn(move || {
+        println!("[Hilo secundario] Hilo monitor iniciado.");
+        
+        loop { // Bucle infinito
+            // 3. Dentro del bucle, bloqueamos el Mutex para acceder al Sink.
+            let sink = sink_for_new_thread.lock().unwrap();
+
+            // 4. Comprobamos si el Sink está vacío.
+            if sink.empty() {
+                println!("[Hilo secundario] La canción ha terminado. Saliendo del bucle.");
+                break; // Rompemos el bucle y el hilo termina.
+            }
+            
+            // Si no está vacío, imprimimos un mensaje (más adelante, emitiremos el tiempo).
+            println!("[Hilo secundario] La canción sigue sonando...");
+            
+            // 5. IMPORTANTE: Liberamos el Mutex explícitamente con `drop(sink)`.
+            //    Si no lo hacemos, el Mutex permanecerá bloqueado durante el `sleep`,
+            //    y el hilo principal no podrá acceder al Sink (ej. para pausar).
+            drop(sink);
+            
+            // Pausamos el hilo por un segundo.
+            std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+        
+        println!("[Hilo secundario] Hilo monitor terminado.");
+    });
 }
 
 #[tauri::command]
@@ -138,21 +183,27 @@ pub fn resume_track(audio_state: State<AudioPlayerState>) {
 pub fn fetch_tracks(db_state: State<'_, DbConnection>) -> Result<Vec<Track>, String> {
     println!("Intentando leer canciones desde la base de datos...");
     let conn = db_state.inner().0.lock().unwrap();
-    let mut stmt = conn.prepare("SELECT path, title, artist, album, duration_secs FROM tracks")
+    let mut stmt = conn
+        .prepare("SELECT path, title, artist, album, duration_secs FROM tracks")
         .map_err(|e| e.to_string())?;
 
-    let tracks_iter = stmt.query_map([], |row| {
-        Ok(Track {
-            path: row.get(0)?,
-            title: row.get(1)?,
-            artist: row.get(2)?,
-            album: row.get(3)?,
-            duration_secs: row.get(4)?,
+    let tracks_iter = stmt
+        .query_map([], |row| {
+            Ok(Track {
+                path: row.get(0)?,
+                title: row.get(1)?,
+                artist: row.get(2)?,
+                album: row.get(3)?,
+                duration_secs: row.get(4)?,
+            })
         })
-    }).map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())?;
 
     let tracks: Vec<Track> = tracks_iter.filter_map(Result::ok).collect();
-    println!("Se encontraron {} canciones en la base de datos.", tracks.len());
+    println!(
+        "Se encontraron {} canciones en la base de datos.",
+        tracks.len()
+    );
     Ok(tracks)
 }
 
@@ -160,7 +211,7 @@ pub fn fetch_tracks(db_state: State<'_, DbConnection>) -> Result<Vec<Track>, Str
 pub fn set_volume(volume: f32, audio_state: State<AudioPlayerState>) {
     // Aseguramos que el valor esté en el rango correcto (0.0 a 1.0).
     let clamped_volume = volume.clamp(0.0, 1.0);
-    
+
     let sink = audio_state.inner().sink.lock().unwrap();
     sink.set_volume(clamped_volume);
 }

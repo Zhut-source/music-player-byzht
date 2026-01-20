@@ -1,10 +1,11 @@
 
 <script lang="ts">
   import { page } from '$app/stores';
-  import { activeTrack, isPlaying } from '$lib/stores/playerStore';
+  import { activeTrack, isPlaying, trackList } from '$lib/stores/playerStore';
   import { goto } from '$app/navigation';
   import { fly } from 'svelte/transition';
   import { invoke } from '@tauri-apps/api/core';
+  import { get } from 'svelte/store';
   
   $: viewedTrack = $page.data.track;
 
@@ -14,19 +15,24 @@
 
   async function handlePlayPauseClick() {
     if (!viewedTrack) return;
-    // ... (la lógica de play/pause se queda igual que en la versión funcional anterior)
+
     if (isThisTrackPlaying) {
-      await invoke('pause_track');
-      isPlaying.set(false);
+        await invoke('pause_track');
+        isPlaying.set(false);
     } else if (isThisTrackActive && !$isPlaying) {
-      await invoke('resume_track');
-      isPlaying.set(true);
+        await invoke('resume_track');
+        isPlaying.set(true);
     } else {
-      await invoke('play_track', { path: viewedTrack.path });
-      activeTrack.set(viewedTrack);
-      isPlaying.set(true);
+        const list = get(trackList);
+        await invoke('play_track', {
+            track: viewedTrack,
+            trackList: list
+        });
+
+        activeTrack.set(viewedTrack);
+        isPlaying.set(true);
     }
-  }
+}
 </script>
 
 <div class="track-details-container" transition:fly={{ duration: 250, y: 15 }}>
