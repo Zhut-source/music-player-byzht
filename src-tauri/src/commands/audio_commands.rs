@@ -260,3 +260,67 @@ pub fn seek_track(position_secs: f64, audio_state: State<AudioPlayerState>) {
         println!("Fallo en el seek a: {:?}", seek_time);
     }
 }
+
+#[tauri::command]
+pub async fn open_add_files_dialog<R: Runtime>(app: AppHandle<R>) -> Option<Vec<String>> {
+    let (tx, rx) = oneshot::channel::<Option<Vec<String>>>();
+
+    // Usamos `pick_files`, que es la función que encontraste para selección múltiple.
+    app.dialog().file().pick_files(move |file_paths| {
+        let result = if let Some(paths) = file_paths {
+            // Convertimos el `Vec<FilePath>` a un `Vec<String>`.
+            let string_paths = paths.into_iter().map(|p| p.to_string()).collect();
+            Some(string_paths)
+        } else {
+            // El usuario canceló.
+            None
+        };
+        tx.send(result).ok();
+    });
+
+    rx.await.unwrap_or(None)
+}
+
+#[tauri::command]
+pub async fn add_tracks_to_library(paths: Vec<String>, db_state: State<'_, DbConnection>) -> Result<(), String> {
+    println!("Añadiendo {} canciones a la biblioteca...", paths.len());
+    let conn = db_state.inner().0.lock().unwrap();
+
+    let mut stmt = conn.prepare(
+        "INSERT OR IGNORE INTO tracks (path, title, artist, album, duration_secs) VALUES (?1, ?2, ?3, ?4, ?5)"
+    ).map_err(|e| e.to_string())?;
+
+    for path_str in paths {
+        let path = std::path::Path::new(&path_str);
+        
+        if let Ok(tagged_file) = lofty::read_from_path(path) {
+            let properties = tagged_file.properties();
+            let mut title = None;
+            let mut artist = None;
+            let mut album = None;
+
+            if let Some(tag) = tagged_file.primary_tag() {
+                title = tag.title().map(|s| s.to_string());
+                artist = tag.artist().map(|s| s.to_string());
+                album = tag.album().map(|s| s.to_string());
+            }
+
+            if title.is_none() {
+                title = path.file_stem().and_then(|s| s.to_str()).map(str::to_string);
+            }
+
+            stmt.execute(params![
+                path.to_string_lossy().to_string(),
+                title,
+                artist,
+                album,
+                Some(properties.duration().as_secs()),
+            ]).map_err(|e| e.to_string())?;
+        }
+    }
+    
+    println!("Proceso de adición completado.");
+    Ok(())
+}
+
+
